@@ -110,6 +110,21 @@ class DataPreprocessor:
         transformed = self.pipeline_.transform(X_clean)
         return self._ensure_dataframe(transformed, X_clean)
 
+    def clean_dataframe(
+        self,
+        X: pd.DataFrame,
+        y: Optional[pd.Series] = None,
+        *,
+        training: bool = True,
+    ) -> Tuple[pd.DataFrame, Optional[pd.Series]]:
+        """Return a cleaned copy of ``X`` applying duplicate removal, imputations, and outlier filtering.
+
+        This exposes the internal preprocessing steps for workflows that need access to the cleaned
+        frame prior to feature encoding (e.g., feature engineering pipelines).
+        """
+
+        return self._clean_dataframe(X, y, training=training)
+
     def fit_transform(
         self, X: pd.DataFrame, y: Optional[pd.Series] = None
     ) -> pd.DataFrame:
