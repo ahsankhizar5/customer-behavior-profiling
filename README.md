@@ -44,3 +44,37 @@ Key outputs under `data/processed/`:
 
 Adjust the `--raw` argument to point at your dataset (CSV or JSON, e.g. files under `data/`). Use `--no-split` to
 skip generating the train/test artifact or `--target-column ""` for unsupervised workflows.
+
+## Machine learning models
+
+Step three introduces clustering, anomaly detection, supervised learning, and a hybrid fraud-risk pipeline.
+Key modules:
+
+- `src/clustering.py` – PCA/t-SNE/UMAP projection helpers plus K-Means, DBSCAN, and hierarchical clustering
+	(with linkage matrices for dendrograms).
+- `src/anomaly_detection.py` – Isolation Forest, One-Class SVM, and dense autoencoder trainers with unified scoring
+	utilities.
+- `src/supervised_models.py` – Logistic Regression, Random Forest, MLP, optional XGBoost/LightGBM boosters, and a
+	`HybridFraudPipeline` class that appends anomaly scores to supervised features.
+
+Example: train clustering + hybrid classifier on an engineered dataset (after running the data pipeline):
+
+```python
+import pandas as pd
+from src.anomaly_detection import train_isolation_forest
+from src.supervised_models import HybridFraudPipeline
+
+features = pd.read_csv("data/processed/transactions_processed.csv")
+labels = features.pop("is_fraud")
+
+def detector(data):
+		return train_isolation_forest(data, contamination=0.05)
+
+pipeline = HybridFraudPipeline(anomaly_detector=detector)
+pipeline.fit(features, labels)
+
+fraud_risk = pipeline.predict_proba(features)[:, 1]
+```
+
+Automated checks cover the new algorithms via `pytest` (see `tests/test_clustering.py`,
+`tests/test_anomaly_detection.py`, and `tests/test_supervised_models.py`).
