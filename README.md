@@ -118,3 +118,76 @@ To benchmark on an untouched dataset, pass `X_external`/`y_external` into `evalu
 are available for custom notebooks as well.
 
 Automated tests cover the evaluation workflow too—see `tests/test_evaluation.py`.
+
+## Deployment & Integration
+
+Step five introduces production-grade delivery via a FastAPI service and a Streamlit dashboard, wrapped in a security
+layer that enforces JWT authentication and AES-256 encryption.
+
+### FastAPI fraud scoring service
+
+- Entrypoint: `src/deployment/api.py`
+- Endpoint: `POST /predict` (protected by JWT)
+	- Accepts a list of raw transaction JSON payloads (`transactions`), computes fraud risk scores, anomaly scores, and
+		provides the top contributing features as human-readable explanations.
+	- Supports batch processing via an internal streaming pipeline (`FraudModelService.predict_batch`) so large datasets
+		are processed chunk-by-chunk.<br>
+	- Optional `encrypt_results=true` flag persists an encrypted audit log (`reports/predictions.enc`) using AES-256-GCM.
+- Authentication: `POST /token` exchanges a pre-shared API key for a JWT access token. All prediction requests must
+	include `Authorization: Bearer <token>` headers.
+- HTTPS enforcement: the service ships with Starlette's `HTTPSRedirectMiddleware`; run behind a TLS-terminating proxy
+	or launch uvicorn with certificates to ensure in-transit encryption.
+
+Run locally (after setting environment variables below):
+
+```powershell
+cd "c:\Users\ahsan\Downloads\Fraud Detection System\customer-behavior-profiling"
+$env:TRAINING_DATA="data/processed/transactions_split.csv"
+$env:TARGET_COLUMN="is_fraud"
+$env:JWT_SECRET="<64-character-secret>"
+$env:API_KEY_SECRET="<api-key>"
+$env:AES_KEY="$(python -c "from src.deployment.security import EncryptionManager; print(EncryptionManager.generate_key())")"
+uvicorn src.deployment.api:app --host 0.0.0.0 --port 8000 --ssl-keyfile path\to\dev.key --ssl-certfile path\to\dev.crt
+```
+
+Recommended TLS configuration: delegate certificates to a reverse proxy (NGINX/Traefik) or provide the file paths above
+when starting uvicorn. The redirect middleware guarantees clients upgrade to HTTPS.
+
+### Streamlit fraud analyst dashboard
+
+- Entrypoint: `streamlit_app.py`
+- Capabilities:
+	- Upload CSV datasets and obtain batch predictions in seconds.
+	- Visualize cluster embeddings (PCA) coloured by fraud probability and scaled by anomaly scores.
+	- Highlight fraud alerts with textual rationales drawn from the logistic regression coefficients and deviation metrics.
+- Uses the same `FraudModelService` under the hood, ensuring consistency between the API and dashboard outputs.
+
+Launch the dashboard:
+
+```powershell
+cd "c:\Users\ahsan\Downloads\Fraud Detection System\customer-behavior-profiling"
+streamlit run streamlit_app.py
+```
+
+Upload recent transactions (CSV) to see live predictions, anomaly distributions, and alert summaries.
+
+### Security & data protection
+
+- **JWT authentication** – managed by `JWTAuthManager`. Secrets configured via `JWT_SECRET` and optionally
+	`API_KEY_SECRET` for issuing access tokens.
+- **AES-256 encryption at rest** – `EncryptionManager` wraps audit logging (and any other payloads) in AES-GCM. Generate
+	keys via `EncryptionManager.generate_key()` and set the value as `AES_KEY` (URL-safe base64 string).
+- **HTTPS in transit** – enforced through middleware; run behind TLS in production to protect the REST interface.
+- **Batch scalability** – `FraudModelService` processes payloads in configurable batches (default 512). Tweak via
+	`BATCH_SIZE` environment variable when constructing the service.
+
+Additional configuration knobs:
+
+| Environment variable | Purpose | Default |
+| --- | --- | --- |
+| `TRAINING_DATA` | Path to labelled dataset used for bootstrapping the service | `data/processed/transactions_split.csv` |
+| `TARGET_COLUMN` | Target column for fraud labels | `is_fraud` |
+| `PREDICTION_LOG` | Destination for encrypted audit entries | `reports/predictions.enc` |
+| `BATCH_SIZE` | Batch size for inference chunks | `512` |
+
+See `tests/test_deployment.py` for reference usage patterns and security regressions.

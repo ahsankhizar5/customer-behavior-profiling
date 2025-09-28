@@ -24,6 +24,8 @@ fastapi>=0.100.0
 uvicorn[standard]>=0.22.0
 streamlit>=1.25.0
 dash>=2.11.0
+python-jose[cryptography]>=3.3.0
+cryptography>=41.0.0
 
 # Utilities
 python-dotenv>=1.0.0
@@ -32,3 +34,4 @@ pyyaml>=6.0.0
 
 # Tooling & tests
 pytest>=7.4.0
+httpx>=0.26.0
